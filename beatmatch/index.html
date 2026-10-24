@@ -425,6 +425,17 @@ $('btnUrl').addEventListener('click',async function(){
 });
 
 // zoeken via de iTunes Search API (30 seconden voorbeeld per nummer)
+function jsonp(url){
+  return new Promise(function(res,rej){
+    var cb='bmcb'+Date.now(),s=document.createElement('script');
+    var to=setTimeout(function(){clean();rej(new Error('time-out'));},8000);
+    function clean(){clearTimeout(to);try{delete window[cb];}catch(e){window[cb]=undefined;}if(s.parentNode)s.parentNode.removeChild(s);}
+    window[cb]=function(d){clean();res(d);};
+    s.onerror=function(){clean();rej(new Error('geen verbinding met de zoekdienst'));};
+    s.src=url+'&callback='+cb;
+    document.head.appendChild(s);
+  });
+}
 async function pickTrack(it){
   $('btnStart').disabled=true;
   try{
@@ -434,7 +445,7 @@ async function pickTrack(it){
     var ab=await r.arrayBuffer();
     loadBuffer(ab,it.trackName+' – '+it.artistName,'itunes:'+it.trackId);
   }catch(e){
-    setStatus('Dit voorbeeld kan niet geladen worden. Probeer een ander nummer.',true);
+    setStatus('Dit voorbeeld kan niet geladen worden ('+(e&&e.message?e.message:'onbekende fout')+'). Probeer een ander nummer.',true);
   }
 }
 $('searchForm').addEventListener('submit',async function(e){
@@ -443,9 +454,15 @@ $('searchForm').addEventListener('submit',async function(e){
   var ul=$('results');ul.hidden=true;ul.textContent='';
   setStatus('Zoeken…');
   try{
-    var r=await fetch('https://itunes.apple.com/search?media=music&entity=song&limit=8&country=BE&term='+encodeURIComponent(q));
-    if(!r.ok)throw new Error('http');
-    var data=await r.json();
+    var su='https://itunes.apple.com/search?media=music&entity=song&limit=8&country=BE&term='+encodeURIComponent(q);
+    var data;
+    try{
+      var r=await fetch(su);
+      if(!r.ok)throw new Error('http '+r.status);
+      data=await r.json();
+    }catch(e1){
+      data=await jsonp(su);
+    }
     var items=(data.results||[]).filter(function(x){return x.previewUrl;});
     if(!items.length){setStatus('Niets gevonden voor “'+q+'”. Probeer artiest en titel samen.',true);return;}
     items.forEach(function(it){
@@ -461,7 +478,10 @@ $('searchForm').addEventListener('submit',async function(e){
     });
     ul.hidden=false;setStatus('Kies een nummer.');
   }catch(err){
-    setStatus('Zoeken lukt niet in deze voorbeeldweergave, want internet is hier geblokkeerd. Op je eigen https-adres werkt het wel. Kies ondertussen een bestand.',true);
+    var framed=false;try{framed=window.self!==window.top;}catch(e2){framed=true;}
+    setStatus(framed
+      ?'Zoeken lukt niet in deze voorbeeldweergave, want internet is hier geblokkeerd. Open de pagina op je eigen https-adres, of kies een bestand.'
+      :'Zoeken is mislukt ('+(err&&err.message?err.message:'onbekende fout')+'). Controleer je verbinding en probeer opnieuw, of kies een bestand.',true);
   }
 });
 
