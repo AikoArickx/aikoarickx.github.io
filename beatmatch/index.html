@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head><body>
+<title>Beatmatch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,600..900&family=Hanken+Grotesk:wght@400;600;700&display=swap">
+<style>
+/* Layout: één kolom op de setup, daarna een volschermveld met vallende beats naar een slaglijn onderaan. */
+:root{
+  --bg:#EDEFF3; --surface:#FFFFFF; --ink:#141821; --muted:#566074; --line:#D3D8E2;
+  --accent:#2F43E0; --accent-ink:#FFFFFF; --field:#F7F8FB; --warn:#A8481A;
+  --soft:#0E9F98; --mid:#E8A412; --heavy:#E5463C;
+  --display:'Anybody','Arial Narrow',system-ui,sans-serif;
+  --body:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1218; --surface:#171C25; --ink:#EEF1F6; --muted:#9AA4B6; --line:#29313D;
+    --accent:#8795FF; --accent-ink:#0E1218; --field:#121720; --warn:#F0966A;
+    --soft:#2CCBC3; --mid:#F6BA3A; --heavy:#FF6B5E; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1218; --surface:#171C25; --ink:#EEF1F6; --muted:#9AA4B6; --line:#29313D;
+  --accent:#8795FF; --accent-ink:#0E1218; --field:#121720; --warn:#F0966A;
+  --soft:#2CCBC3; --mid:#F6BA3A; --heavy:#FF6B5E; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.45 var(--body);-webkit-text-size-adjust:100%;overflow-x:hidden}
+html.playing,html.playing body{overflow:hidden;overscroll-behavior:none}
+#app{min-height:100%;display:flex;flex-direction:column;padding-block:20px 32px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+html.playing #app{height:100%;padding-block:10px}
+[hidden]{display:none!important}
+.wrap{width:100%;max-width:560px;margin-inline:auto;display:flex;flex-direction:column}
+h1{margin:0;font:800 clamp(46px,15vw,78px)/.92 var(--display);font-variation-settings:'wdth' 140;letter-spacing:-.01em;text-wrap:balance}
+.lead{margin:12px 0 0;font-size:17px;color:var(--muted);max-width:44ch}
+.step{display:grid;gap:12px;padding-block:20px;border-top:1px solid var(--line);margin-top:22px}
+.step-h{display:flex;align-items:baseline;gap:10px}
+.step-h b{font:800 26px/1 var(--display);font-variation-settings:'wdth' 130;color:var(--accent)}
+.step-h h2{margin:0;font:700 22px/1.1 var(--display);font-variation-settings:'wdth' 110}
+.small{font-size:14px;color:var(--muted);margin:0}
+.msg{font-size:15px;margin:0;min-height:1.4em}
+.msg.warn{color:var(--warn)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{min-height:48px;padding:0 20px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  font:600 16px/1 var(--body);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-align:center}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.big{min-height:56px;font-size:18px;width:100%}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn:focus-visible,input:focus-visible+label.btn,input[type=range]:focus-visible,.seg input:focus-visible+label,.txt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.results{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.results li{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center}
+.results img{width:48px;height:48px;border-radius:8px;background:var(--field);object-fit:cover}
+.results b,.results span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.results span{font-size:14px;color:var(--muted)}
+.results .btn{min-height:44px;padding:0 16px}
+.txt{flex:1 1 200px;min-width:0;min-height:48px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:400 16px var(--body)}
+.ovwrap{display:grid;gap:8px}
+#ov{width:100%;height:84px;display:block;border-radius:10px;background:var(--field);border:1px solid var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.seg label{min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:9px;font-weight:600;cursor:pointer;text-align:center;padding:0 8px}
+.seg input:checked+label{background:var(--ink);color:var(--bg)}
+.field-row{display:grid;gap:4px}
+.field-row .top{display:flex;justify-content:space-between;gap:12px;font-weight:600}
+.field-row output{font-variant-numeric:tabular-nums;color:var(--muted);font-weight:400}
+input[type=range]{width:100%;accent-color:var(--accent);height:32px}
+.calib{display:grid;gap:10px;padding:14px;border:1px dashed var(--line);border-radius:12px}
+.gauge{position:relative;height:14px;border-radius:7px;background:var(--field);border:1px solid var(--line);overflow:hidden}
+.gauge i{position:absolute;top:0;bottom:0;left:50%;width:0;background:var(--accent)}
+.gauge::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--line)}
+.dots{display:flex;gap:8px}
+.dots span{width:14px;height:14px;border-radius:50%;border:2px solid var(--muted)}
+.dots span.on{background:var(--accent);border-color:var(--accent)}
+/* spelscherm */
+#screen-play{flex:1;min-height:0;width:100%;max-width:640px;margin-inline:auto;display:flex;flex-direction:column;gap:8px}
+.hud{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center}
+.score{font:800 38px/1 var(--display);font-variation-settings:'wdth' 120;font-variant-numeric:tabular-nums}
+.score small{display:block;font:600 12px/1.2 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.combo{text-align:right;font-variant-numeric:tabular-nums}
+.combo b{display:block;font:800 26px/1 var(--display);font-variation-settings:'wdth' 120;color:var(--accent)}
+.combo span{font-size:13px;color:var(--muted)}
+.hud .btn{min-height:44px;padding:0 14px}
+.progress{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--accent)}
+.field{position:relative;flex:1;min-height:0;border-radius:16px;overflow:hidden;background:var(--field);border:1px solid var(--line)}
+#cv{display:block;width:100%;height:100%;touch-action:none}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--bg) 80%,transparent)}
+.overlay div{display:grid;gap:10px;min-width:220px}
+.overlay h3{margin:0 0 6px;font:800 34px/1 var(--display);font-variation-settings:'wdth' 130;text-align:center}
+/* resultaat */
+.grade{font:900 clamp(104px,34vw,170px)/.85 var(--display);font-variation-settings:'wdth' 150;color:var(--accent);margin:6px 0 0}
+.big-score{font:800 34px/1 var(--display);font-variation-settings:'wdth' 120;font-variant-numeric:tabular-nums}
+dl.stats{display:grid;grid-template-columns:1fr auto;gap:10px 16px;margin:0}
+dl.stats dt{color:var(--muted)}
+dl.stats dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+#strip{width:100%;height:72px;display:block;border-radius:10px;background:var(--field);border:1px solid var(--line)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+
+<main id="app">
+  <div class="wrap" id="screen-setup">
+    <header>
+      <h1>Beatmatch</h1>
+      <p class="lead">Speel de beats van je eigen nummer na met je gsm. Houd hem hoog en duw hem op de beat snel naar beneden. Hoe dichter op de tel en hoe beter je kracht past bij de muziek, hoe meer punten.</p>
+    </header>
+
+    <section class="step" aria-labelledby="h1s">
+      <div class="step-h"><b>1</b><h2 id="h1s">Nummer</h2></div>
+      <form class="row" id="searchForm" role="search">
+        <input type="search" id="q" class="txt" placeholder="Typ een liedje of artiest" aria-label="Zoek een liedje" autocomplete="off">
+        <button class="btn primary" id="btnSearch" type="submit">Zoek</button>
+      </form>
+      <ul class="results" id="results" hidden></ul>
+      <p class="small">Je krijgt 30 seconden uit elk nummer, genoeg voor één ronde. Of gebruik je eigen bestand:</p>
+      <div class="row">
+        <input class="sr" type="file" id="file" accept="audio/*">
+        <label class="btn" for="file">Kies audiobestand</label>
+      </div>
+      <div class="row">
+        <input type="url" id="url" class="txt" inputmode="url" placeholder="of een directe link naar een mp3" aria-label="Directe link naar een audiobestand">
+        <button class="btn" id="btnUrl" type="button">Laad</button>
+      </div>
+      <p class="small">Links van Spotify, YouTube of Apple Music werken niet, die geven hun audio niet vrij. Gebruik een mp3, m4a of wav.</p>
+      <p class="msg" id="status" role="status" aria-live="polite"></p>
+      <div class="ovwrap" id="ovwrap" hidden>
+        <canvas id="ov" aria-label="Energie van het nummer met gedetecteerde beats"></canvas>
+        <div class="legend"><span><i style="background:var(--soft)"></i>zachte beat</span><span><i style="background:var(--mid)"></i>middel</span><span><i style="background:var(--heavy)"></i>harde beat</span></div>
+        <p class="small">Grotere cirkel in het spel betekent harder duwen.</p>
+      </div>
+    </section>
+
+    <section class="step" aria-labelledby="h2s">
+      <div class="step-h"><b>2</b><h2 id="h2s">Gsm</h2></div>
+      <div class="seg" role="radiogroup" aria-label="Besturing">
+        <input class="sr" type="radio" name="ctrl" id="ctrlMotion" value="motion">
+        <label for="ctrlMotion">Beweging</label>
+        <input class="sr" type="radio" name="ctrl" id="ctrlTap" value="tap" checked>
+        <label for="ctrlTap">Tikken</label>
+      </div>
+      <div class="row"><button class="btn" id="btnMotion" type="button">Bewegingssensor aanzetten</button></div>
+      <div class="calib" id="calib" hidden>
+        <p class="msg" id="calibMsg"></p>
+        <div class="gauge" aria-hidden="true"><i id="gauge"></i></div>
+        <div class="dots" aria-label="Voortgang kalibratie"><span></span><span></span><span></span></div>
+      </div>
+      <p class="msg" id="motionMsg" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="step" aria-labelledby="h3s">
+      <div class="step-h"><b>3</b><h2 id="h3s">Spel</h2></div>
+      <div class="seg" role="radiogroup" aria-label="Aantal slagen">
+        <input class="sr" type="radio" name="tempo" id="tempoHalf" value="half" checked>
+        <label for="tempoHalf">Om de beat</label>
+        <input class="sr" type="radio" name="tempo" id="tempoFull" value="full">
+        <label for="tempoFull">Elke beat</label>
+      </div>
+      <div class="field-row">
+        <div class="top"><label for="sync">Sync</label><output id="syncOut" for="sync">0 ms</output></div>
+        <input type="range" id="sync" min="-200" max="200" step="5" value="0">
+        <p class="small">Scoor je steeds te laat, trek de schuif naar links. Na elk spel zie je hoeveel je gemiddeld ernaast zat.</p>
+      </div>
+      <div class="field-row">
+        <div class="top"><label for="sens">Gevoeligheid</label><output id="sensOut" for="sens">100%</output></div>
+        <input type="range" id="sens" min="50" max="160" step="5" value="100">
+      </div>
+      <button class="btn primary big" id="btnStart" type="button" disabled>Start</button>
+    </section>
+  </div>
+
+  <section id="screen-play" hidden aria-label="Spel">
+    <div class="hud">
+      <div class="score"><span id="hudScore">0</span><small>punten</small></div>
+      <div class="combo"><b id="hudMult">×1</b><span id="hudCombo">0 combo</span></div>
+      <button class="btn" id="btnPause" type="button">Pauze</button>
+    </div>
+    <div class="progress"><i id="prog"></i></div>
+    <div class="field" id="field">
+      <canvas id="cv"></canvas>
+      <div class="overlay" id="overlay" hidden>
+        <div>
+          <h3>Pauze</h3>
+          <button class="btn primary" id="btnResume" type="button">Verder</button>
+          <button class="btn" id="btnQuit" type="button">Stoppen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap" id="screen-result" hidden>
+    <header>
+      <p class="small" id="resTrack"></p>
+      <div class="grade" id="resGrade">A</div>
+      <p class="big-score" id="resScore">0</p>
+      <p class="small" id="resBest"></p>
+    </header>
+    <section class="step">
+      <dl class="stats" id="resStats"></dl>
+      <canvas id="strip" aria-label="Jouw run over de lengte van het nummer"></canvas>
+      <p class="small" id="resSync"></p>
+    </section>
+    <div class="row">
+      <button class="btn primary" id="btnAgain" type="button" style="flex:1">Opnieuw</button>
+      <button class="btn" id="btnOther" type="button" style="flex:1">Ander nummer</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id);};
+
+// ==ANALYSIS START==
+function makeFFT(N){
+  var levels=Math.round(Math.log2(N));
+  var cos=new Float32Array(N/2),sin=new Float32Array(N/2);
+  for(var i=0;i<N/2;i++){cos[i]=Math.cos(2*Math.PI*i/N);sin[i]=Math.sin(2*Math.PI*i/N);}
+  var rev=new Uint16Array(N);
+  for(var i2=0;i2<N;i2++){var r=0,x=i2;for(var j=0;j<levels;j++){r=(r<<1)|(x&1);x>>=1;}rev[i2]=r;}
+  return function(re,im){
+    for(var i=0;i<N;i++){var j=rev[i];if(j>i){var t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t;}}
+    for(var size=2;size<=N;size<<=1){
+      var half=size>>1,step=N/size;
+      for(var a=0;a<N;a+=size){
+        for(var b=a,k=0;b<a+half;b++,k+=step){
+          var l=b+half;
+          var tre=re[l]*cos[k]+im[l]*sin[k];
+          var tim=-re[l]*sin[k]+im[l]*cos[k];
+          re[l]=re[b]-tre;im[l]=im[b]-tim;re[b]+=tre;im[b]+=tim;
+        }
+      }
+    }
+  };
+}
+function toMono(buf,maxSec){
+  var n=Math.min(buf.length,Math.floor(maxSec*buf.sampleRate));
+  var out=new Float32Array(n),ch=buf.numberOfChannels;
+  for(var c=0;c<ch;c++){var d=buf.getChannelData(c);for(var i=0;i<n;i++)out[i]+=d[i];}
+  if(ch>1)for(var k=0;k<n;k++)out[k]/=ch;
+  return out;
+}
+function decimate(x,f){
+  if(f<=1)return x;
+  var n=Math.floor(x.length/f),y=new Float32Array(n);
+  for(var i=0;i<n;i++){var s=0,b=i*f;for(var j=0;j<f;j++)s+=x[b+j];y[i]=s/f;}
+  return y;
+}
+function percentile(arr,p){
+  var a=Array.prototype.slice.call(arr).sort(function(u,v){return u-v;});
+  if(!a.length)return 0;
+  return a[Math.min(a.length-1,Math.max(0,Math.round(p*(a.length-1))))];
+}
+async function analyseTrack(mono,sr,progress){
+  var f=Math.max(1,Math.round(sr/22050));
+  var x=decimate(mono,f),sr2=sr/f;
+  var N=1024,H=256,fft=makeFFT(N);
+  var frames=Math.floor((x.length-N)/H);
+  if(frames<500)throw new Error('short');
+  var fps=sr2/H;
+  var win=new Float32Array(N);
+  for(var i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/(N-1));
+  var re=new Float32Array(N),im=new Float32Array(N),prev=new Float32Array(N/2);
+  var flux=new Float32Array(frames),rms=new Float32Array(frames);
+  for(var t=0;t<frames;t++){
+    var b0=t*H,e=0;
+    for(var q=0;q<N;q++){var v=x[b0+q];re[q]=v*win[q];im[q]=0;e+=v*v;}
+    rms[t]=Math.sqrt(e/N);
+    fft(re,im);
+    var s=0;
+    for(var k=1;k<N/2;k++){
+      var m=Math.sqrt(re[k]*re[k]+im[k]*im[k]);
+      var lm=Math.log1p(m*20);
+      var d=lm-prev[k];
+      if(d>0)s+=d;
+      prev[k]=lm;
+    }
+    flux[t]=t===0?0:s;
+    if(progress&&t%600===0)await progress(t/frames);
+  }
+  // onset-sterkte: flux min lokaal gemiddelde, genormaliseerd
+  var W=43,pre=new Float64Array(frames+1);
+  for(var t1=0;t1<frames;t1++)pre[t1+1]=pre[t1]+flux[t1];
+  var onset=new Float32Array(frames),sq=0;
+  for(var t2=0;t2<frames;t2++){
+    var a=Math.max(0,t2-W),b=Math.min(frames,t2+W+1);
+    var mean=(pre[b]-pre[a])/(b-a);
+    var ov=Math.max(0,flux[t2]-mean);
+    onset[t2]=ov;sq+=ov*ov;
+  }
+  var sd=Math.sqrt(sq/frames)||1;
+  for(var t3=0;t3<frames;t3++)onset[t3]/=sd;
+  // tempo via autocorrelatie
+  var maxLag=Math.ceil(fps*60/70),minLag=Math.floor(fps*60/170);
+  var ac=new Float64Array(maxLag*2+4);
+  for(var l=1;l<ac.length;l++){
+    var sum=0;
+    for(var u=0;u+l<frames;u++)sum+=onset[u]*onset[u+l];
+    ac[l]=sum/(frames-l);
+  }
+  function score(lag){
+    var bpm=60*fps/lag;
+    var w=Math.exp(-0.5*Math.pow(Math.log2(bpm/118)/0.75,2));
+    return (ac[lag]+0.5*ac[Math.min(ac.length-1,2*lag)])*w;
+  }
+  var bl=minLag,bs=-1;
+  for(var lg=minLag;lg<=maxLag;lg++){var sc=score(lg);if(sc>bs){bs=sc;bl=lg;}}
+  var s0=score(bl-1),s1=score(bl),s2=score(bl+1),den=s0-2*s1+s2;
+  var delta=den!==0?0.5*(s0-s2)/den:0;
+  var P=bl+Math.max(-0.5,Math.min(0.5,delta));
+  // beat tracking (dynamisch programmeren)
+  var tight=80,cum=new Float32Array(frames),back=new Int32Array(frames).fill(-1);
+  var lo0=Math.round(P*0.5),hi0=Math.round(P*2);
+  for(var t4=0;t4<frames;t4++){
+    var best=0,bj=-1,jmin=Math.max(0,t4-hi0),jmax=t4-lo0;
+    for(var j2=jmin;j2<=jmax;j2++){
+      var r2=Math.log((t4-j2)/P),val=cum[j2]-tight*r2*r2;
+      if(val>best){best=val;bj=j2;}
+    }
+    cum[t4]=onset[t4]+best;back[t4]=bj;
+  }
+  var end=frames-1,bv=-1;
+  for(var t5=Math.max(0,frames-Math.round(2*P));t5<frames;t5++){if(cum[t5]>bv){bv=cum[t5];end=t5;}}
+  var bf=[],tt=end;
+  while(tt>=0){bf.push(tt);tt=back[tt];}
+  bf.reverse();
+  // intensiteit per beat
+  var o=[],r=[];
+  for(var n=0;n<bf.length;n++){
+    var bb=bf[n],m=0;
+    for(var kk=Math.max(0,bb-3);kk<=Math.min(frames-1,bb+3);kk++)if(onset[kk]>m)m=onset[kk];
+    o.push(m);
+    var rs=0,rc=0;
+    for(var k2=bb;k2<Math.min(frames,bb+10);k2++){rs+=rms[k2];rc++;}
+    r.push(rs/Math.max(1,rc));
+  }
+  var o90=percentile(o,0.9)||1,r90=percentile(r,0.9)||1;
+  var c=o.map(function(v,i){return 0.6*Math.min(1.3,v/o90)+0.4*Math.min(1.3,r[i]/r90);});
+  var c10=percentile(c,0.1),c90=percentile(c,0.9),spread=c90-c10;
+  var gate=0.12*percentile(rms,0.9);
+  var beats=[];
+  for(var i3=0;i3<bf.length;i3++){
+    if(r[i3]<gate)continue;
+    var w=spread<0.15?0.6:Math.max(0,Math.min(1,(c[i3]-c10)/spread));
+    beats.push({t:(bf[i3]*H+N/2)/sr2+0.008,w:w,n:i3});
+  }
+  return {bpm:60*fps/P,beats:beats,onset:onset,fps:fps,duration:x.length/sr2};
+}
+// ==ANALYSIS END==
+
+// ---------- staat ----------
+var S={buf:null,an:null,name:'',key:''};
+var M={mode:'tap',g:null,tPrev:0,d:0,s:0,downSign:1,pHard:14,sens:1,got:false,listening:false,calib:null,calibrated:false};
+var G=null,ctx=null,LEAD=2.4,FALL=1.8;
+var C={};
+
+function readColors(){
+  var cs=getComputedStyle(document.documentElement);
+  ['ink','muted','line','accent','soft','mid','heavy','field','surface','bg'].forEach(function(k){C[k]=cs.getPropertyValue('--'+k).trim();});
+}
+readColors();
+try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){readColors();drawOverview();});}catch(e){}
+try{new MutationObserver(function(){readColors();drawOverview();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});}catch(e){}
+
+function ensureCtx(){
+  if(!ctx){var AC=window.AudioContext||window.webkitAudioContext;ctx=new AC();}
+  return ctx;
+}
+function tier(w){return w<0.34?'soft':w<0.67?'mid':'heavy';}
+function setStatus(t,warn){var el=$('status');el.textContent=t;el.className='msg'+(warn?' warn':'');}
+
+// ---------- nummer laden ----------
+async function loadBuffer(ab,name,key){
+  try{
+    setStatus('Nummer lezen…');
+    ensureCtx();
+    var buf=await new Promise(function(res,rej){ctx.decodeAudioData(ab,res,rej);});
+    var mono=toMono(buf,360);
+    var an=await analyseTrack(mono,buf.sampleRate,function(p){
+      setStatus('Beats zoeken… '+Math.round(p*100)+'%');
+      return new Promise(function(r){setTimeout(r,0);});
+    });
+    if(an.beats.length<16)throw new Error('nobeat');
+    S.buf=buf;S.an=an;S.name=name;S.key=key;
+    setStatus(name+' · '+Math.round(an.bpm)+' BPM · '+an.beats.length+' beats');
+    $('ovwrap').hidden=false;
+    drawOverview();
+    $('tempoHalf').checked=an.bpm>115;
+    $('tempoFull').checked=an.bpm<=115;
+    $('btnStart').disabled=false;
+  }catch(e){
+    S.buf=null;S.an=null;$('btnStart').disabled=true;$('ovwrap').hidden=true;
+    if(e&&e.message==='short')setStatus('Dit nummer is te kort. Kies er een van minstens zes seconden.',true);
+    else if(e&&e.message==='nobeat')setStatus('Ik vind geen duidelijke beat in dit nummer. Probeer een nummer met drums.',true);
+    else setStatus('Dit bestand kan niet gelezen worden. Probeer een mp3, m4a of wav.',true);
+  }
+}
+$('file').addEventListener('change',async function(){
+  var f=this.files&&this.files[0];if(!f)return;
+  $('btnStart').disabled=true;
+  var ab=await f.arrayBuffer();
+  loadBuffer(ab,f.name.replace(/\.[^.]+$/,''),f.name+':'+f.size);
+});
+$('btnUrl').addEventListener('click',async function(){
+  var raw=$('url').value.trim();if(!raw)return;
+  var u;try{u=new URL(raw);}catch(e){setStatus('Dat is geen geldige link.',true);return;}
+  if(/(spotify|youtube|youtu\.be|music\.apple|deezer|soundcloud|tidal)/i.test(u.hostname)){
+    setStatus('Streamingdiensten geven hun audio niet vrij aan webpagina’s. Download het nummer als bestand en kies het hierboven.',true);return;
+  }
+  $('btnStart').disabled=true;
+  try{
+    setStatus('Link laden…');
+    var r=await fetch(u.href);
+    if(!r.ok)throw new Error('http');
+    var ab=await r.arrayBuffer();
+    var nm=decodeURIComponent(u.pathname.split('/').pop()||'nummer').replace(/\.[^.]+$/,'');
+    loadBuffer(ab,nm,u.href);
+  }catch(e){
+    setStatus('Laden mislukt. De link is geen audiobestand, of de server laat het niet toe vanuit een webpagina. Kies het bestand zelf.',true);
+  }
+});
+
+// zoeken via de iTunes Search API (30 seconden voorbeeld per nummer)
+async function pickTrack(it){
+  $('btnStart').disabled=true;
+  try{
+    setStatus('Voorbeeld laden…');
+    var r=await fetch(it.previewUrl);
+    if(!r.ok)throw new Error('http');
+    var ab=await r.arrayBuffer();
+    loadBuffer(ab,it.trackName+' – '+it.artistName,'itunes:'+it.trackId);
+  }catch(e){
+    setStatus('Dit voorbeeld kan niet geladen worden. Probeer een ander nummer.',true);
+  }
+}
+$('searchForm').addEventListener('submit',async function(e){
+  e.preventDefault();
+  var q=$('q').value.trim();if(!q)return;
+  var ul=$('results');ul.hidden=true;ul.textContent='';
+  setStatus('Zoeken…');
+  try{
+    var r=await fetch('https://itunes.apple.com/search?media=music&entity=song&limit=8&country=BE&term='+encodeURIComponent(q));
+    if(!r.ok)throw new Error('http');
+    var data=await r.json();
+    var items=(data.results||[]).filter(function(x){return x.previewUrl;});
+    if(!items.length){setStatus('Niets gevonden voor “'+q+'”. Probeer artiest en titel samen.',true);return;}
+    items.forEach(function(it){
+      var li=document.createElement('li');
+      var img=document.createElement('img');img.alt='';img.src=it.artworkUrl60||it.artworkUrl100||'';
+      var box=document.createElement('div');box.style.minWidth='0';
+      var b=document.createElement('b');b.textContent=it.trackName;
+      var sp=document.createElement('span');sp.textContent=it.artistName;
+      box.appendChild(b);box.appendChild(sp);
+      var btn=document.createElement('button');btn.type='button';btn.className='btn';btn.textContent='Kies';
+      btn.addEventListener('click',function(){pickTrack(it);});
+      li.appendChild(img);li.appendChild(box);li.appendChild(btn);ul.appendChild(li);
+    });
+    ul.hidden=false;setStatus('Kies een nummer.');
+  }catch(err){
+    setStatus('Zoeken lukt niet in deze voorbeeldweergave, want internet is hier geblokkeerd. Op je eigen https-adres werkt het wel. Kies ondertussen een bestand.',true);
+  }
+});
+
+// overzicht van het nummer
+function sizeCanvas(cv){
+  var dpr=Math.min(3,window.devicePixelRatio||1),w=cv.clientWidth,h=cv.clientHeight;
+  if(!w||!h)return null;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+  var c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
+  return {c:c,w:w,h:h};
+}
+function drawOverview(){
+  if(!S.an||$('ovwrap').hidden)return;
+  var z=sizeCanvas($('ov'));if(!z)return;
+  var c=z.c,w=z.w,h=z.h,an=S.an,env=an.onset,dur=an.duration;
+  c.clearRect(0,0,w,h);
+  var per=env.length/w,peak=0,cols=[];
+  for(var x=0;x<w;x++){var m=0,a=Math.floor(x*per),b=Math.min(env.length,Math.floor((x+1)*per)+1);for(var i=a;i<b;i++)if(env[i]>m)m=env[i];cols.push(m);if(m>peak)peak=m;}
+  c.fillStyle=C.line;
+  for(var x2=0;x2<w;x2++){var bh=Math.min(1,cols[x2]/(peak||1))*(h-14);c.fillRect(x2,h-bh,1,bh);}
+  an.beats.forEach(function(bt){
+    var px=bt.t/dur*w;
+    c.fillStyle=C[tier(bt.w)];
+    var bh2=6+bt.w*(h*0.45);
+    c.fillRect(px-1,0,2,bh2);
+  });
+}
+window.addEventListener('resize',function(){drawOverview();});
+
+// ---------- sensor ----------
+function thrNow(){return Math.max(3,0.3*M.pHard/M.sens);}
+function makeDetector(){
+  var st='idle',tPush=0,peak=0,minV=0,tMin=0,cool=0,tBrake=0;
+  return {
+    reset:function(){st='idle';},
+    step:function(s,tp){
+      var thr=thrNow();
+      if(st==='cool'){if(tp>=cool)st='idle';else return null;}
+      if(st==='idle'){if(s>thr){st='push';tPush=tp;peak=s;}return null;}
+      if(st==='push'){
+        if(s>peak)peak=s;
+        if(s<0){st='brake';minV=s;tMin=tp;tBrake=tp;}
+        else if(tp-tPush>550)st='idle';
+        return null;
+      }
+      if(st==='brake'){
+        if(s<minV){minV=s;tMin=tp;}
+        if(minV<=-thr*0.35&&s>minV*0.5){st='cool';cool=tp+200;return {strength:peak,tp:tMin};}
+        if(tp-tBrake>300)st='idle';
+        return null;
+      }
+      return null;
+    }
+  };
+}
+var det=makeDetector();
+
+function onMotion(e){
+  var a=e.accelerationIncludingGravity;
+  if(!a||a.x==null||a.y==null||a.z==null)return;
+  var tp=performance.now();M.got=true;
+  if(!M.g){M.g=[a.x,a.y,a.z];M.tPrev=tp;return;}
+  var dt=Math.max(0.001,(tp-M.tPrev)/1000);M.tPrev=tp;
+  var al=dt/(0.4+dt);
+  M.g[0]+=al*(a.x-M.g[0]);M.g[1]+=al*(a.y-M.g[1]);M.g[2]+=al*(a.z-M.g[2]);
+  var gm=Math.hypot(M.g[0],M.g[1],M.g[2])||1;
+  var d=((a.x-M.g[0])*M.g[0]+(a.y-M.g[1])*M.g[1]+(a.z-M.g[2])*M.g[2])/gm;
+  M.d=0.55*d+0.45*M.d;
+  M.s=M.downSign*M.d;
+  if(M.calib){calibStep(M.d,M.s,tp);}
+  else if(G&&!G.paused&&!G.over&&M.mode==='motion'){
+    var h=det.step(M.s,tp);
+    if(h)registerHit(h.strength,ctx.currentTime-(performance.now()-h.tp)/1000);
+  }
+}
+
+function setDots(n){Array.prototype.forEach.call(document.querySelectorAll('.dots span'),function(el,i){el.className=i<n?'on':'';});}
+function startCalibration(){
+  M.calib={stage:'rest',restSince:0,peaks:[]};
+  det.reset();setDots(0);
+  $('calib').hidden=false;
+  $('calibMsg').textContent='Houd je gsm hoog en stil.';
+}
+function calibStep(d,s,tp){
+  var K=M.calib;
+  if(K.stage==='rest'){
+    if(Math.abs(d)<1.2){
+      if(!K.restSince)K.restSince=tp;
+      if(tp-K.restSince>600){K.stage='sign';$('calibMsg').textContent='Duw hem nu snel naar beneden.';}
+    }else K.restSince=0;
+  }else if(K.stage==='sign'){
+    if(Math.abs(d)>5){
+      M.downSign=d>0?1:-1;K.stage='strokes';det.reset();
+      det.step(M.downSign*d,tp);
+      $('calibMsg').textContent='Goed. Nog twee keer: omhoog, dan snel naar beneden.';
+    }
+  }else if(K.stage==='strokes'){
+    var h=det.step(s,tp);
+    if(h){
+      K.peaks.push(h.strength);setDots(K.peaks.length);
+      if(K.peaks.length>=3){
+        var p=K.peaks.slice().sort(function(a,b){return a-b;})[1];
+        M.pHard=Math.max(8,Math.min(45,p));M.calibrated=true;M.calib=null;
+        $('calibMsg').textContent='Gekalibreerd. Jouw harde slag is het maximum in het spel.';
+        $('motionMsg').textContent='Bewegingssensor klaar.';
+        $('ctrlMotion').checked=true;M.mode='motion';det.reset();
+      }else{
+        $('calibMsg').textContent='Nog '+(3-K.peaks.length)+' keer: omhoog, dan snel naar beneden.';
+      }
+    }
+  }
+}
+function noSensor(msg){
+  M.mode='tap';$('ctrlTap').checked=true;$('calib').hidden=true;M.calib=null;
+  var el=$('motionMsg');el.className='msg warn';
+  el.textContent=msg||'Geen bewegingssensor beschikbaar op deze pagina (bijvoorbeeld in een voorbeeld of op een computer). Je speelt met tikken.';
+}
+$('btnMotion').addEventListener('click',async function(){
+  $('motionMsg').className='msg';$('motionMsg').textContent='';
+  if(typeof DeviceMotionEvent==='undefined'){noSensor();return;}
+  if(typeof DeviceMotionEvent.requestPermission==='function'){
+    try{
+      var r=await DeviceMotionEvent.requestPermission();
+      if(r!=='granted'){noSensor('Toegang tot beweging geweigerd. Sluit de pagina en probeer opnieuw, of speel met tikken.');return;}
+    }catch(e){noSensor();return;}
+  }
+  M.got=false;M.g=null;
+  if(!M.listening){window.addEventListener('devicemotion',onMotion);M.listening=true;}
+  startCalibration();
+  setTimeout(function(){if(!M.got)noSensor();},1800);
+});
+document.querySelectorAll('input[name=ctrl]').forEach(function(el){
+  el.addEventListener('change',function(){
+    M.mode=el.value;
+    if(el.value==='motion'&&!M.calibrated){$('motionMsg').className='msg';$('motionMsg').textContent='Zet eerst de bewegingssensor aan.';}
+  });
+});
+function loadPrefs(){
+  try{
+    var p=JSON.parse(localStorage.getItem('bm:prefs')||'{}');
+    if(typeof p.sync==='number'){$('sync').value=p.sync;}
+    if(typeof p.sens==='number'){$('sens').value=p.sens;}
+  }catch(e){}
+  syncUI();
+}
+function savePrefs(){try{localStorage.setItem('bm:prefs',JSON.stringify({sync:+$('sync').value,sens:+$('sens').value}));}catch(e){}}
+function syncUI(){
+  $('syncOut').textContent=(+$('sync').value>0?'+':'')+$('sync').value+' ms';
+  $('sensOut').textContent=$('sens').value+'%';
+  M.sens=+$('sens').value/100;
+}
+$('sync').addEventListener('input',function(){syncUI();savePrefs();});
+$('sens').addEventListener('input',function(){syncUI();savePrefs();});
+loadPrefs();
+
+// ---------- spel ----------
+function show(id){
+  ['screen-setup','screen-play','screen-result'].forEach(function(s){$(s).hidden=s!==id;});
+  document.documentElement.classList.toggle('playing',id==='screen-play');
+  window.scrollTo(0,0);
+}
+function buildTargets(){
+  var beats=S.an.beats,list=beats;
+  if($('tempoHalf').checked){
+    var s0=0,s1=0;
+    beats.forEach(function(b){if(b.n%2)s1+=b.w;else s0+=b.w;});
+    var ph=s1>s0?1:0;
+    list=beats.filter(function(b){return b.n%2===ph;});
+  }
+  return list.map(function(b){return {t:b.t,w:b.w,done:false,acc:0,hit:false};});
+}
+var wake=null;
+async function startGame(){
+  ensureCtx();
+  try{await ctx.resume();}catch(e){}
+  var T=buildTargets();
+  if(T.length<8){setStatus('Te weinig beats om te spelen.',true);return;}
+  G={T:T,beats:S.an.beats,score:0,combo:0,maxCombo:0,counts:{p:0,g:0,o:0,m:0},strays:0,deltas:[],styles:[],nextMiss:0,paused:false,over:false,fx:[],
+     lat:(ctx.outputLatency||ctx.baseLatency||0),sync:(+$('sync').value)/1000,tap:M.mode==='tap',gaugeV:0,lastHud:''};
+  det.reset();readColors();show('screen-play');
+  $('overlay').hidden=true;
+  resizeField();
+  G.t0=ctx.currentTime+0.2;
+  var src=ctx.createBufferSource();src.buffer=S.buf;src.connect(ctx.destination);
+  src.start(G.t0+LEAD);
+  src.onended=function(){if(G&&G.src===src&&!G.over&&!G.paused)finish();};
+  G.src=src;
+  try{if(navigator.wakeLock)navigator.wakeLock.request('screen').then(function(l){wake=l;}).catch(function(){});}catch(e){}
+  requestAnimationFrame(frame);
+}
+function songNow(){return ctx.currentTime-G.t0-LEAD-G.lat;}
+function mult(){return 1+Math.min(3,Math.floor(G.combo/10));}
+
+function registerHit(strength,clock){
+  if(!G||G.over||G.paused)return;
+  var st=clock-G.t0-LEAD-G.lat+G.sync;
+  var T=G.T,best=-1,bd=1e9;
+  for(var i=G.nextMiss;i<T.length&&T[i].t<st+0.3;i++){
+    if(T[i].done)continue;
+    var d=Math.abs(T[i].t-st);
+    if(d<bd){bd=d;best=i;}
+  }
+  var cx=G.cx||0,hy=G.hitY||0;
+  try{if(navigator.vibrate)navigator.vibrate(12);}catch(e){}
+  if(best>=0&&bd<=0.2){
+    var tg=T[best],delta=st-tg.t,ad=Math.abs(delta),base,label,key;
+    if(ad<=0.06){base=100;label='Perfect';key='p';}
+    else if(ad<=0.12){base=70;label='Top';key='g';}
+    else{base=40;label='Ok';key='o';}
+    var style=0.8,hint='';
+    if(strength!=null){
+      var f=strength/M.pHard,e=0.3+0.7*tg.w;
+      style=1-Math.min(1,Math.abs(f-e)/0.5);
+      G.styles.push(style);
+      if(f-e>0.3)hint='Zachter';else if(e-f>0.3)hint='Harder';
+    }
+    var q=0.65+0.35*style;
+    tg.done=true;tg.hit=true;tg.acc=base/100*q;
+    G.counts[key]++;G.deltas.push(delta);G.combo++;if(G.combo>G.maxCombo)G.maxCombo=G.combo;
+    G.score+=Math.round(base*q*mult());
+    G.fx.push({k:'ring',t0:performance.now(),r:14+Math.min(1.3,strength!=null?strength/M.pHard:0.7)*30,col:C[tier(tg.w)]});
+    G.fx.push({k:'txt',t0:performance.now(),txt:label+(hint?' · '+hint:''),col:C.ink});
+  }else{
+    G.strays++;G.combo=0;G.score=Math.max(0,G.score-10);
+    G.fx.push({k:'txt',t0:performance.now(),txt:'Extra',col:C.muted});
+  }
+}
+function markMiss(tg){tg.done=true;G.counts.m++;G.combo=0;G.fx.push({k:'txt',t0:performance.now(),txt:'Mis',col:C.muted});}
+
+function resizeField(){
+  var cv=$('cv');var z=sizeCanvas(cv);if(!z)return;
+  G&&(G.W=z.w,G.H=z.h);
+}
+window.addEventListener('resize',function(){if(G&&!$('screen-play').hidden)resizeField();});
+try{new ResizeObserver(function(){if(G&&!$('screen-play').hidden)resizeField();}).observe($('field'));}catch(e){}
+
+function frame(){
+  if(!G||G.over||G.paused)return;
+  var st=songNow(),T=G.T;
+  while(G.nextMiss<T.length&&T[G.nextMiss].t+0.2<st){
+    if(!T[G.nextMiss].done)markMiss(T[G.nextMiss]);
+    G.nextMiss++;
+  }
+  draw(st);
+  var hud=G.score+'|'+G.combo;
+  if(hud!==G.lastHud){
+    G.lastHud=hud;
+    $('hudScore').textContent=G.score.toLocaleString('nl-BE');
+    $('hudMult').textContent='×'+mult();
+    $('hudCombo').textContent=G.combo+' combo';
+  }
+  $('prog').style.width=Math.max(0,Math.min(100,st/S.an.duration*100))+'%';
+  if(st>S.an.duration+0.4){finish();return;}
+  requestAnimationFrame(frame);
+}
+
+function draw(st){
+  var z=sizeCanvas($('cv'));if(!z)return;
+  var c=z.c,W=z.w,H=z.h;G.W=W;G.H=H;
+  c.clearRect(0,0,W,H);
+  var hitY=H*0.8,cx=W/2,laneW=Math.min(W*0.72,380),sc=Math.min(1,W/420);
+  G.hitY=hitY;G.cx=cx;
+  // baan
+  c.fillStyle=C.line;c.globalAlpha=0.28;c.fillRect(cx-laneW/2,0,laneW,H);c.globalAlpha=1;
+  // alle beats als kleine streepjes op de randen
+  var B=G.beats,lastBeat=-9,lastW=0;
+  for(var i=0;i<B.length;i++){
+    var dt=B[i].t-st;
+    if(dt<=0){lastBeat=-dt;lastW=B[i].w;continue;}
+    if(dt>FALL)break;
+    var y=hitY*(1-dt/FALL);
+    c.fillStyle=C.muted;c.globalAlpha=0.5;
+    c.fillRect(cx-laneW/2,y-1,10,2);c.fillRect(cx+laneW/2-10,y-1,10,2);c.globalAlpha=1;
+  }
+  // slaglijn die oplicht op elke beat
+  var pulse=lastBeat>=0&&lastBeat<0.25?Math.exp(-lastBeat*14)*(0.4+0.6*lastW):0;
+  c.strokeStyle=C.ink;c.lineWidth=3+7*pulse;c.lineCap='round';
+  c.beginPath();c.moveTo(cx-laneW/2-14,hitY);c.lineTo(cx+laneW/2+14,hitY);c.stroke();
+  // doelen
+  var T=G.T;
+  for(var k=G.nextMiss;k<T.length;k++){
+    var tg=T[k],d=tg.t-st;
+    if(d>FALL+0.1)break;
+    if(tg.done)continue;
+    var yy=hitY*(1-d/FALL),r=(14+24*(0.3+0.7*tg.w))*sc,col=C[tier(tg.w)];
+    c.beginPath();c.arc(cx,yy,r,0,Math.PI*2);
+    c.globalAlpha=0.22;c.fillStyle=col;c.fill();c.globalAlpha=1;
+    c.lineWidth=4;c.strokeStyle=col;c.stroke();
+  }
+  // effecten
+  var now=performance.now();
+  G.fx=G.fx.filter(function(f){return now-f.t0<650;});
+  G.fx.forEach(function(f){
+    var a=(now-f.t0)/650;
+    if(f.k==='ring'){
+      c.globalAlpha=1-a;c.strokeStyle=f.col;c.lineWidth=5;
+      c.beginPath();c.arc(cx,hitY,(f.r+a*26)*sc,0,Math.PI*2);c.stroke();c.globalAlpha=1;
+    }else{
+      c.globalAlpha=1-a;c.fillStyle=f.col;
+      c.font='800 '+Math.round(26*Math.max(.8,sc))+'px Anybody,system-ui,sans-serif';c.textAlign='center';
+      c.fillText(f.txt,cx,hitY+64*sc-a*20);c.globalAlpha=1;
+    }
+  });
+  // sensormeter
+  if(!G.tap){
+    var tgtV=Math.max(-1.2,Math.min(1.2,M.s/M.pHard));
+    G.gaugeV+=(tgtV-G.gaugeV)*0.5;
+    var gx=W-14,gh=H*0.3;
+    c.fillStyle=C.line;c.globalAlpha=0.6;c.fillRect(gx-3,H*0.5-gh,6,gh*2);c.globalAlpha=1;
+    c.fillStyle=C.accent;
+    if(G.gaugeV>=0)c.fillRect(gx-3,H*0.5,6,G.gaugeV*gh);else c.fillRect(gx-3,H*0.5+G.gaugeV*gh,6,-G.gaugeV*gh);
+  }
+  // aftellen
+  if(st<0){
+    var n=Math.min(3,Math.ceil(-st/(LEAD/3)));
+    c.fillStyle=C.ink;c.textAlign='center';c.font='900 '+Math.round(96*sc)+'px Anybody,system-ui,sans-serif';
+    c.fillText(String(n),cx,H*0.42);
+    c.font='600 '+Math.round(16*Math.max(.9,sc))+'px "Hanken Grotesk",system-ui,sans-serif';c.fillStyle=C.muted;
+    c.fillText(G.tap?'Tik op de beat':'Gsm hoog, dan snel naar beneden',cx,H*0.42+30);
+  }
+}
+
+// tikken en toets
+$('cv').addEventListener('pointerdown',function(e){
+  if(!G||!G.tap||G.over||G.paused)return;
+  e.preventDefault();registerHit(null,ctx.currentTime);
+});
+window.addEventListener('keydown',function(e){
+  if(e.code==='Space'&&G&&G.tap&&!G.over&&!G.paused&&!$('screen-play').hidden){e.preventDefault();registerHit(null,ctx.currentTime);}
+});
+
+// pauze
+function pauseGame(){
+  if(!G||G.over||G.paused)return;
+  G.paused=true;det.reset();
+  try{ctx.suspend();}catch(e){}
+  $('overlay').hidden=false;
+}
+function resumeGame(){
+  if(!G||G.over||!G.paused)return;
+  $('overlay').hidden=true;
+  ctx.resume().then(function(){G.paused=false;requestAnimationFrame(frame);});
+}
+function releaseWake(){try{if(wake){wake.release();wake=null;}}catch(e){}}
+function stopSource(){
+  if(G&&G.src){G.src.onended=null;try{G.src.stop();}catch(e){}}
+  releaseWake();
+}
+$('btnPause').addEventListener('click',pauseGame);
+$('btnResume').addEventListener('click',resumeGame);
+$('btnQuit').addEventListener('click',function(){
+  if(G){G.over=true;stopSource();}
+  try{ctx.resume();}catch(e){}
+  show('screen-setup');drawOverview();
+});
+document.addEventListener('visibilitychange',function(){if(document.hidden)pauseGame();});
+
+// resultaat
+function finish(){
+  if(!G||G.over)return;
+  G.over=true;stopSource();
+  var T=G.T;
+  T.forEach(function(t){if(!t.done){t.done=true;G.counts.m++;}});
+  var n=T.length,accSum=0,timing=0;
+  T.forEach(function(t){accSum+=t.acc;if(t.hit)timing+=(t.acc>0?1:0);});
+  var accuracy=Math.max(0,(accSum-0.5*G.strays)/n);
+  var grade=accuracy>=0.92?'S':accuracy>=0.8?'A':accuracy>=0.65?'B':accuracy>=0.45?'C':'D';
+  var styleAvg=G.styles.length?G.styles.reduce(function(a,b){return a+b;},0)/G.styles.length:null;
+  var meanDelta=G.deltas.length?G.deltas.reduce(function(a,b){return a+b;},0)/G.deltas.length:0;
+  var best=0,key='bm:best:'+S.key+':'+(G.tap?'t':'m')+':'+($('tempoHalf').checked?'h':'f'),isNew=false;
+  try{best=+localStorage.getItem(key)||0;if(G.score>best){localStorage.setItem(key,String(G.score));isNew=best>0;}}catch(e){}
+  show('screen-result');
+  $('resTrack').textContent=S.name+' · '+Math.round(S.an.bpm)+' BPM';
+  $('resGrade').textContent=grade;
+  $('resScore').textContent=G.score.toLocaleString('nl-BE')+' punten';
+  $('resBest').textContent=isNew?'Nieuw record.':(best>0?'Beste score: '+Math.max(best,G.score).toLocaleString('nl-BE'):'');
+  var rows=[
+    ['Nauwkeurigheid',Math.round(accuracy*100)+'%'],
+    ['Stijl (kracht)',styleAvg==null?'niet bij tikken':Math.round(styleAvg*100)+'%'],
+    ['Perfect',G.counts.p],['Top',G.counts.g],['Ok',G.counts.o],['Gemist',G.counts.m],
+    ['Extra slagen',G.strays],['Langste combo',G.maxCombo]
+  ];
+  $('resStats').innerHTML=rows.map(function(r){return '<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>';}).join('');
+  var ms=Math.round(meanDelta*1000);
+  $('resSync').textContent=G.deltas.length<5?'':(Math.abs(ms)<=15?'Je timing zit gemiddeld goed op de tel.':
+    'Je zat gemiddeld '+Math.abs(ms)+' ms te '+(ms>0?'laat':'vroeg')+'. Zet Sync op '+Math.max(-200,Math.min(200,(+$('sync').value)-ms))+' ms (nu '+$('sync').value+').');
+  var zz=sizeCanvas($('strip'));
+  if(zz){
+    var c=zz.c,w=zz.w,h=zz.h;c.clearRect(0,0,w,h);
+    T.forEach(function(t){
+      var x=t.t/S.an.duration*w;
+      if(t.hit){c.fillStyle=C.accent;var bh=3+t.acc*(h-8);c.fillRect(x-1,h-bh-2,2.5,bh);}
+      else{c.fillStyle=C.line;c.fillRect(x-1,h-5,2.5,3);}
+    });
+  }
+}
+$('btnStart').addEventListener('click',startGame);
+$('btnAgain').addEventListener('click',startGame);
+$('btnOther').addEventListener('click',function(){show('screen-setup');drawOverview();});
+})();
+</script>
+
+</body></html>
